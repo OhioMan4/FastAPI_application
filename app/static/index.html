@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>DevOps Observability</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚙️</text></svg>" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #0d0d14;
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    header { text-align: center; margin-bottom: 32px; }
+
+    header h1 {
+      font-size: 2rem;
+      background: linear-gradient(90deg, #f59e0b, #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    header p { color: #94a3b8; margin-top: 6px; font-size: 0.95rem; }
+
+    /* Stats bar */
+    .stats-bar {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-bottom: 32px;
+    }
+
+    .stat-card {
+      background: #16162a;
+      border: 1px solid #2e2e4d;
+      border-radius: 12px;
+      padding: 16px 28px;
+      text-align: center;
+      min-width: 140px;
+    }
+
+    .stat-card .value {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #f59e0b;
+    }
+
+    .stat-card .label {
+      font-size: 0.75rem;
+      color: #6366f1;
+      margin-top: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    /* Grid */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .card {
+      background: #16162a;
+      border: 1px solid #2e2e4d;
+      border-radius: 14px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      transition: border-color 0.2s;
+    }
+
+    .card:hover { border-color: #f59e0b; }
+
+    .card-header { display: flex; align-items: center; gap: 10px; }
+
+    .method-badge {
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 6px;
+      text-transform: uppercase;
+    }
+
+    .get  { background: #2d1f6e; color: #a78bfa; }
+    .post { background: #3d2000; color: #f59e0b; }
+
+    .card-title { font-size: 1rem; font-weight: 600; }
+    .card-desc  { font-size: 0.82rem; color: #64748b; }
+
+    /* POST input */
+    .input-row { display: flex; gap: 8px; }
+
+    .input-row input {
+      flex: 1;
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid #2e2e4d;
+      background: #0d0d14;
+      color: #e2e8f0;
+      font-size: 0.85rem;
+      outline: none;
+    }
+
+    .input-row input:focus { border-color: #f59e0b; }
+
+    button {
+      padding: 8px 18px;
+      border-radius: 8px;
+      border: none;
+      background: linear-gradient(135deg, #f59e0b, #a78bfa);
+      color: #0d0d14;
+      font-weight: 700;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: opacity 0.2s;
+      white-space: nowrap;
+    }
+
+    button:hover    { opacity: 0.85; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .btn-danger {
+      background: linear-gradient(135deg, #f87171, #fb923c);
+    }
+
+    /* Response box */
+    .response-box {
+      background: #0d0d14;
+      border: 1px solid #2e2e4d;
+      border-radius: 8px;
+      padding: 12px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.78rem;
+      color: #94a3b8;
+      min-height: 60px;
+      max-height: 160px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    .response-box.success { border-color: #a78bfa; color: #a78bfa; }
+    .response-box.error   { border-color: #f87171; color: #f87171; }
+    .response-box.loading { color: #f59e0b; }
+
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #334155;
+      display: inline-block;
+      margin-left: auto;
+    }
+    .status-dot.ok  { background: #a78bfa; }
+    .status-dot.err { background: #f87171; }
+
+    footer {
+      text-align: center;
+      margin-top: 40px;
+      color: #2e2e4d;
+      font-size: 0.8rem;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>⚙️ DevOps Observability</h1>
+  <p>Prometheus · Grafana · Loki · K6</p>
+</header>
+
+<!-- Live Stats -->
+<div class="stats-bar" id="statsBar">
+  <div class="stat-card"><div class="value" id="s-total">–</div><div class="label">Total Requests</div></div>
+  <div class="stat-card"><div class="value" id="s-errors">–</div><div class="label">Errors</div></div>
+  <div class="stat-card"><div class="value" id="s-slow">–</div><div class="label">Slow Calls</div></div>
+  <div class="stat-card"><div class="value" id="s-compute">–</div><div class="label">Compute Calls</div></div>
+  <div class="stat-card"><div class="value" id="s-errrate">–</div><div class="label">Error Rate %</div></div>
+</div>
+
+<!-- Endpoint Cards -->
+<div class="grid">
+
+  <!-- Health -->
+  <div class="card">
+    <div class="card-header">
+      <span class="method-badge get">GET</span>
+      <span class="card-title">/health</span>
+      <span class="status-dot" id="dot-health"></span>
+    </div>
+    <p class="card-desc">Liveness probe – quick status check.</p>
+    <button onclick="callEndpoint('GET','/health','res-health','dot-health')">Send</button>
+    <div class="response-box" id="res-health">awaiting request…</div>
+  </div>
+
+  <!-- List Items -->
+  <div class="card">
+    <div class="card-header">
+      <span class="method-badge get">GET</span>
+      <span class="card-title">/items</span>
+      <span class="status-dot" id="dot-items-get"></span>
+    </div>
+    <p class="card-desc">Returns the full list of items (fast).</p>
+    <button onclick="callEndpoint('GET','/items','res-items-get','dot-items-get')">Send</button>
+    <div class="response-box" id="res-items-get">awaiting request…</div>
+  </div>
+
+  <!-- Create Item -->
+  <div class="card">
+    <div class="card-header">
+      <span class="method-badge post">POST</span>
+      <span class="card-title">/items</span>
+      <span class="status-dot" id="dot-items-post"></span>
+    </div>
+    <p class="card-desc">Create a new item by name.</p>
+    <div class="input-row">
+      <input id="newItemName" type="text" placeholder='Item name e.g. "Thingamajig"' />
+      <button onclick="createItem()">Send</button>
+    </div>
+    <div class="response-box" id="res-items-post">awaiting request…</div>
+  </div>
+
+  <!-- Slow -->
+  <div class="card">
+    <div class="card-header">
+      <span class="method-badge get">GET</span>
+      <span class="card-title">/slow</span>
+      <span class="status-dot" id="dot-slow"></span>
+    </div>
+    <p class="card-desc">Simulates a 2–3 s delayed response.</p>
+    <button onclick="callEndpoint('GET','/slow','res-slow','dot-slow')" id="btn-slow">Send</button>
+    <div class="response-box" id="res-slow">awaiting request…</div>
+  </div>
+
+  <!-- Error -->
+  <div class="card">
+    <div class="card-header">
+      <span class="method-badge get">GET</span>
+      <span class="card-title">/error</span>
+      <span class="status-dot" id="dot-error"></span>
+    </div>
+    <p class="card-desc">Returns HTTP 500 ~30% of the time.</p>
+    <button onclick="callEndpoint('GET','/error','res-error','dot-error')">Send</button>
+    <div class="response-box" id="res-error">awaiting request…</div>
+  </div>
+
+  <!-- Compute -->
+  <div class="card">
+    <div class="card-header">
+      <span class="method-badge get">GET</span>
+      <span class="card-title">/compute</span>
+      <span class="status-dot" id="dot-compute"></span>
+    </div>
+    <p class="card-desc">CPU-intensive Fibonacci to simulate load.</p>
+    <button onclick="callEndpoint('GET','/compute','res-compute','dot-compute')" id="btn-compute">Send</button>
+    <div class="response-box" id="res-compute">awaiting request…</div>
+  </div>
+
+  <!-- Stats -->
+  <div class="card">
+    <div class="card-header">
+      <span class="method-badge get">GET</span>
+      <span class="card-title">/stats</span>
+      <span class="status-dot" id="dot-stats"></span>
+    </div>
+    <p class="card-desc">Live request statistics from the server.</p>
+    <button onclick="callEndpoint('GET','/stats','res-stats','dot-stats')">Send</button>
+    <div class="response-box" id="res-stats">awaiting request…</div>
+  </div>
+
+  <!-- Reset -->
+  <div class="card">
+    <div class="card-header">
+      <span class="method-badge get">GET</span>
+      <span class="card-title">/reset</span>
+      <span class="status-dot" id="dot-reset"></span>
+    </div>
+    <p class="card-desc">Reset all stat counters back to zero.</p>
+    <button class="btn-danger" onclick="resetStats()">Reset</button>
+    <div class="response-box" id="res-reset">awaiting request…</div>
+  </div>
+
+</div>
+
+<footer>FastAPI · Prometheus · Grafana · Loki · K6 — DevOps Observability Demo</footer>
+
+<script>
+  async function callEndpoint(method, path, resId, dotId, body = null) {
+    const box = document.getElementById(resId);
+    const dot = document.getElementById(dotId);
+
+    box.textContent = '⏳ loading…';
+    box.className   = 'response-box loading';
+    dot.className   = 'status-dot';
+
+    try {
+      const opts = { method, headers: { 'Content-Type': 'application/json' } };
+      if (body) opts.body = JSON.stringify(body);
+
+      const res    = await fetch(path, opts);
+      const data   = await res.json();
+      const pretty = JSON.stringify(data, null, 2);
+
+      if (res.ok) {
+        box.textContent = pretty;
+        box.className   = 'response-box success';
+        dot.className   = 'status-dot ok';
+      } else {
+        box.textContent = `HTTP ${res.status}\n${pretty}`;
+        box.className   = 'response-box error';
+        dot.className   = 'status-dot err';
+      }
+    } catch (e) {
+      box.textContent = `Network error: ${e.message}`;
+      box.className   = 'response-box error';
+      dot.className   = 'status-dot err';
+    }
+
+    // If reset was called, only refresh stats bar — don't clear other cards
+    if (path === '/reset') {
+      setTimeout(refreshStats, 300);
+      return;
+    }
+
+    setTimeout(refreshStats, 300);
+  }
+
+  async function createItem() {
+    const name = document.getElementById('newItemName').value.trim();
+    if (!name) {
+      alert('Please enter an item name.');
+      return;
+    }
+    await callEndpoint('POST', '/items', 'res-items-post', 'dot-items-post', { name });
+    document.getElementById('newItemName').value = '';
+  }
+
+  async function refreshStats() {
+    try {
+      const res  = await fetch('/stats');
+      const data = await res.json();
+      document.getElementById('s-total').textContent   = data.total_requests;
+      document.getElementById('s-errors').textContent  = data.errors;
+      document.getElementById('s-slow').textContent    = data.slow_calls;
+      document.getElementById('s-compute').textContent = data.compute_calls;
+      document.getElementById('s-errrate').textContent = data.error_rate + '%';
+    } catch (_) {}
+  }
+
+  // All cards to clear on reset
+  const ALL_CARDS = [
+    { res: 'res-health',      dot: 'dot-health' },
+    { res: 'res-items-get',   dot: 'dot-items-get' },
+    { res: 'res-items-post',  dot: 'dot-items-post' },
+    { res: 'res-slow',        dot: 'dot-slow' },
+    { res: 'res-error',       dot: 'dot-error' },
+    { res: 'res-compute',     dot: 'dot-compute' },
+    { res: 'res-stats',       dot: 'dot-stats' },
+  ];
+
+  // Dedicated reset — only updates the reset card and stats bar
+  async function resetStats() {
+    const box = document.getElementById('res-reset');
+    const dot = document.getElementById('dot-reset');
+
+    box.textContent = '⏳ resetting…';
+    box.className   = 'response-box loading';
+
+    try {
+      const res  = await fetch('/reset');
+      const data = await res.json();
+      box.textContent = JSON.stringify(data, null, 2);
+      box.className   = 'response-box success';
+      dot.className   = 'status-dot ok';
+
+      // Clear all other cards
+      ALL_CARDS.forEach(({ res, dot }) => {
+        document.getElementById(res).textContent = 'awaiting request…';
+        document.getElementById(res).className   = 'response-box';
+        document.getElementById(dot).className   = 'status-dot';
+      });
+
+    } catch (e) {
+      box.textContent = `Network error: ${e.message}`;
+      box.className   = 'response-box error';
+      dot.className   = 'status-dot err';
+    }
+
+    setTimeout(refreshStats, 300);
+  }
+
+  refreshStats();
+  setInterval(refreshStats, 3000);
+</script>
+
+</body>
+</html>
